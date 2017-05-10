@@ -1,0 +1,18 @@
+# depslib dependency file v1.0
+1494419128 source:h:\tool_swap\main.cpp
+	<iostream>
+	<fstream>
+	<vector>
+	<math.h>
+	<sstream>
+	<string>
+
+1494441487 source:c:\users\julian\onedrive\cpp projects\tool_swap\main.cpp
+	<iostream>
+	<iomanip>
+	<fstream>
+	<vector>
+	<math.h>
+	<sstream>
+	<string>
+
