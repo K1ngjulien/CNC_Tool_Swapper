@@ -22,18 +22,57 @@ Toolliste um dieses Programm auch mit anderen CNC-Maschinen verwenden zu können.
 #include <string>
 
 using namespace std;
-
-int getToolNum (string line,float &drillsize);
-
-int getToolNum (string line,float &drillsize)       //Liefert die Nummer bzw die groesse des Bohrers
+typedef struct
 {
-    int i = line.length()-1,ival;
+    string name;
+    float diameter;
+}Tool;
+
+bool getToolset(vector<Tool> &tools);
+int getTool (string line,vector<Tool>tools,float &indiam);
+
+
+bool getToolset(vector<Tool> &tools)        //Loads the availible tools from "cnc.tools"
+{
+    tools.resize(0);
+    int i= 0;
+    string bufname;
+    float bufdiam;
+    bool ret;
+
+    ifstream  file("cnc.tools");
+
+    if(file.is_open())
+    {
+        do
+        {
+            tools.resize(i+1);
+
+            file>>tools.at(i).name>>tools.at(i).diameter;
+
+            i++;
+        }
+        while(!file.eof());
+        ret = true;
+
+        file.close();
+
+    }
+    else
+    {
+        cout<<"Fehler beim laden der Tools!\n";
+        ret = false;
+    }
+    return ret;
+}
+
+int getTool (string line,vector<Tool>tools,float &indiam)       //Liefert den index des passenden Bohrers
+{
+    int i = line.length()-1,j = 0;
     string sval;
     float fval;
     char buf;
     bool loop = true;
-
-    drillsize = 0;
 
     do      //Die letzten Zeichen eines Strings werden eingelesen
     {
@@ -53,44 +92,43 @@ int getToolNum (string line,float &drillsize)       //Liefert die Nummer bzw die
 
 
     fval = stof(sval); //ACHTUNG!! C++ 11 ONLY!  Der String wird zur Zahl konvertiert
+    indiam = fval;
     fval = roundf(fval * 10) / 10; //Auf die 1. Dezimalstelle runden
 
-    if(fval > 1.5)      //Die Sonderfälle treten erst ab 1.6 mm Durchmesser auf
+    j = 0;
+    loop = true;
+
+    while(loop)
     {
-        if(fval == 1.6)
+        if((j>=tools.size())||(tools.at(j).diameter>=fval))
         {
-            fval = 1.8;
+            loop= false;
         }
-        else if (fval == 2.0)
-            {
-                fval = 2.5;
-            }
-
-        if(fval == 1.8) //Die Formel von unten gilt hier nicht mehr da die Bohrer nicht mehr in einem Abstand von 0.1 mm sind
-            ival = 13;
-        else if (fval == 2.5)
-            ival = 14;
-        else if (fval == 3.0)
-            ival = 15;
-    }
-    else        //Bei einer Abstufung von 0.1 mm zwischen den Bohrern gilt meißt diese Formel
-    {
-        ival = (fval-0.3) * 10;
+        else
+        {
+            j++;
+        }
     }
 
-    drillsize = fval; //Zurückliefern des Bohrdurchmessers
-    return ival;      //Zurückliefern der Bohrernummer
+    return j;
 }
 
 int main(const int argc, const char** argv)
 {
     string infile, outfile, buf;
-    int i = 0,j;
-    float drillsize;
+    vector<Tool> toolset;
+    vector<int> usedtools;
+    float indiam;
+    int i = 0,j,toolindex;
     bool loop = true;
-    vector<int> tools;
+    Tool buftool;
 
     cout<<"CNC-Tool-Swapper, Julian Kandlhofer 2BHEL, 2017\n\n";
+
+    if (!getToolset(toolset))
+        return 0;
+
+    cout<<"Es wurden "<<toolset.size()<<" Tools erkannt.\n";
 
     if(argc == 3)
     {
@@ -107,7 +145,6 @@ int main(const int argc, const char** argv)
         getline(cin,outfile);
     }
 
-
     ifstream ifile(infile);
     ofstream ofile(outfile);
 
@@ -118,7 +155,7 @@ int main(const int argc, const char** argv)
         getline(ifile, buf);
         ofile<<buf<<endl;     // 1. Zeile Übernehmen
 
-        for(j = 0; j< 4; j++)
+        for(j = 0; j< 4; j++) //4 Zeilen Überspringen
             getline(ifile,buf);
 
         cout<<"Tools werden erkannt...\n";
@@ -128,12 +165,13 @@ int main(const int argc, const char** argv)
             getline(ifile, buf);
             if(buf.size() > 1)
             {
-                tools.resize(i+2);
+                toolindex = getTool(buf,toolset,indiam);
+                buftool = toolset.at(toolindex);
+                cout<<fixed<<setprecision(2)<<"T"<<i+1<<" "<<indiam<<"mm ==> "<<buftool.name<<", durchm.: "<<buftool.diameter<<"mm"<<endl;
 
-                tools.at(i) = getToolNum(buf,drillsize);
-                cout<<"T"<<i+1<<" ==> T"<<tools.at(i)<<", durchm.: "<<fixed<<setprecision(2)<<drillsize<<"mm"<<endl;
-
-                ofile <<'T'<<tools.at(i)<<"F00S00C"<<fixed<<setprecision(2)<<float(drillsize)<<endl;
+                ofile <<buftool.name<<"F00S00C"<<fixed<<setprecision(2)<<float(buftool.diameter)<<endl;
+                usedtools.resize(usedtools.size()+1);
+                usedtools.at(i)= toolindex;
                 i++;
             }
             else
@@ -144,6 +182,9 @@ int main(const int argc, const char** argv)
         while(loop);
 
         cout<<"Toolerkennung erfolgreich!\n";
+
+        ofile<<'%'<<endl;
+
         i= 0;
 
         do
@@ -155,7 +196,7 @@ int main(const int argc, const char** argv)
 
             if(buf.at(0)=='T')
             {
-                ofile<<'T'<<tools.at(i)<<endl;
+                ofile<<toolset.at(usedtools.at(i)).name<<endl;
                 i++;
             }
             else
